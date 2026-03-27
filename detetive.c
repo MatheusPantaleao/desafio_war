@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
+#define TAMANHO_HASH 11
 
 typedef struct Sala
 {
@@ -17,6 +19,12 @@ typedef struct NoPista
     struct NoPista *esq;
     struct NoPista *dir;
 } NoPista;
+
+typedef struct NoHash {
+    char pista[30];
+    char suspeito[30];
+    struct NoHash *prox;
+} NoHash;
 
 Sala *criarSala(char *nome, char *pista)
 {
@@ -64,7 +72,73 @@ void exibirPista(NoPista *raiz)
     }
 }
 
-void explorarSalas(Sala *atual)
+int calcularHash(char *chave){
+    int soma = 0;
+    for(int i = 0; chave[i] != 0; i++){
+        soma += chave[i];
+    }
+    return soma % TAMANHO_HASH;
+}
+
+void inserirHash (NoHash *tabela[], char *pista, char *suspeito){
+    int indice = calcularHash(pista);
+    NoHash *novo = (NoHash *)malloc(sizeof(NoHash));
+    strcpy(novo->pista, pista);
+    strcpy(novo->suspeito, suspeito);
+    novo->prox = tabela[indice];
+    tabela[indice] = novo;
+}
+
+char *encontrarSuspeito(NoHash *tabela[], char *pista){
+    int indice = calcularHash(pista);
+    NoHash *atual = tabela[indice];
+    while(atual != NULL){
+        if(strcmp(atual->pista, pista) == 0){
+            return atual->suspeito;
+        }
+        atual = atual->prox;
+    }
+    return NULL;
+}
+
+int julgamento(NoPista *raizPistas, NoHash *tabela[], char *acusado){
+    if (raizPistas == NULL) { return 0; }
+
+    int contagem = 0;
+    char *suspeitoDaPista = encontrarSuspeito(tabela, raizPistas->conteudo);
+    if (suspeitoDaPista != NULL && strcmp(suspeitoDaPista, acusado) == 0){
+        contagem++;
+    }
+
+    contagem += julgamento(raizPistas->esq, tabela, acusado);
+    contagem += julgamento(raizPistas->dir, tabela, acusado);
+
+    return contagem;
+}
+
+void veredito(NoPista *minhasPistas, NoHash *tabela[]){
+    char acusado[30];
+
+    printf("\n------------------------------------------\n");
+    printf("  ---------------- TRIBUNAL ----------------\n\n");
+    printf(" Os suspeitos sao:\n");
+    printf(" cozinheiro, faxineira, garcom\n");
+    printf(" Quem e criminoso ?\n");
+    scanf(" %[^\n]", acusado); // leitura com espaco
+    for(int i = 0; acusado[i]; i++){
+        acusado[i] = tolower(acusado[i]);
+    }
+
+    int evidencias = julgamento(minhasPistas, tabela, acusado);
+
+    if(evidencias >= 2){
+        printf("Parabens, voce encontou o assasino\n");
+    } else {
+        printf("Voce acusou um inocente D:\n");
+    }
+}
+
+void explorarSalas(Sala *atual, NoHash *tabela[])
 {
     char escolha;
     int jogando = 1;
@@ -77,7 +151,7 @@ void explorarSalas(Sala *atual)
         {
             printf("VOCE ENCONTROU UMA PISTA: [%s]\n", atual->pista);
             minhasPistas = inserirPista(minhasPistas, atual->pista);
-            strcpy(atual->pista, "");
+            strcpy(atual->pista, ""); //remove a pista da sala apos a coleta
         }
 
         if (atual->esquerda == NULL && atual->direita == NULL)
@@ -91,7 +165,7 @@ void explorarSalas(Sala *atual)
             printf(" [d] seguir pela direita\n");
         if (atual->pai != NULL)
             printf(" [s] voltar para a sala anterior \n");
-        printf(" [x] fechar o jogo\n");
+        printf(" [x] finalizar investigacao e ir para o tribunal\n");
         scanf(" %c", &escolha);
 
         switch (escolha)
@@ -131,7 +205,7 @@ void explorarSalas(Sala *atual)
             break;
         case 'x':
         case 'X':
-            printf("jogo encerrado\n");
+            printf("SAINDO DA MANSAO\n");
             jogando = 0;
             break;
 
@@ -140,7 +214,7 @@ void explorarSalas(Sala *atual)
             break;
         }
     }
-    printf("---JOGO FINALIZADO---\n\n");
+    printf("---INVESTIGAÇAO FINALIZADA---\n\n");
     if (minhasPistas == NULL)
     {
         printf("Nenhuma pista encontrada\n");
@@ -150,10 +224,23 @@ void explorarSalas(Sala *atual)
         printf("Pistas encontradas:\n");
         exibirPista(minhasPistas);
     }
+    veredito(minhasPistas, tabela);
 }
 
 int main()
 {
+    NoHash *tabelaPistas[TAMANHO_HASH];
+    for (int i = 0; i < TAMANHO_HASH; i++){
+        tabelaPistas[i] = NULL;
+    }
+    //associando pistas aos suspeitos
+    inserirHash(tabelaPistas, "carpete rasgado", "garcom");
+    inserirHash(tabelaPistas, "abajur quebrado", "faxineira");
+    inserirHash(tabelaPistas, "faca com sangue", "cozinheiro"); //em teoria o unico culpado e o cozinheiro
+    inserirHash(tabelaPistas, "flores amassadas", "cozinheiro");
+
+
+
     // criacao das salas da mansao
     Sala *hall = criarSala("hall de entrada", "carpete rasgado");    // raiz da arvore o hall
     Sala *salaEstar = criarSala("sala de estar", "abajur quebrado"); // esta a esquerda do hall
@@ -175,7 +262,7 @@ int main()
     jardim->pai = cozinha;
     sotao->pai = cozinha;
 
-    explorarSalas(hall);
+    explorarSalas(hall, tabelaPistas);
 
     return 0;
 }
